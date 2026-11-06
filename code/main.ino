@@ -9,9 +9,19 @@ const int yellowLED = 12;
 const int greenLED = 11;
 
 // Имитация двигателя
-const int motorForward = 5; // IN1
-const int motorReverse = 6; // IN2
-const int enablePin = 3;    // ENA PWM
+const int motorForward = 5;
+const int motorReverse = 6;
+const int enablePin = 3;
+
+// Защита кнопки от дребезга
+int lastButtonReading = HIGH;
+int stableButtonState = HIGH;
+unsigned long lastDebounceTime = 0;
+const unsigned long debounceDelay = 50;
+
+// Допустимый диапазон HC-SR04
+const int minDistance = 2;
+const int maxDistance = 400;
 
 void stopMotor() {
   analogWrite(enablePin, 0);
@@ -39,17 +49,30 @@ void setup() {
   pinMode(enablePin, OUTPUT);
 
   Serial.begin(9600);
+
   stopMotor();
   allLEDsOff();
 }
 
 void loop() {
+  // Проверка кнопки с debounce
+  int reading = digitalRead(buttonPin);
 
-  // Проверка кнопки
-  if (digitalRead(buttonPin) == HIGH) {
+  if (reading != lastButtonReading) {
+    lastDebounceTime = millis();
+  }
+
+  if (millis() - lastDebounceTime >= debounceDelay) {
+    stableButtonState = reading;
+  }
+
+  lastButtonReading = reading;
+
+  // Кнопка отпущена
+  if (stableButtonState == HIGH) {
     stopMotor();
     allLEDsOff();
-    delay(50);
+    delay(10);
     return;
   }
 
@@ -63,7 +86,7 @@ void loop() {
 
   long duration = pulseIn(echoPin, HIGH, 30000UL);
 
-  // Ошибка датчика
+  // Проверка отсутствия Echo
   if (duration == 0) {
     stopMotor();
     allLEDsOff();
@@ -73,6 +96,15 @@ void loop() {
   }
 
   int distance = duration * 0.0343 / 2;
+
+  // Проверка допустимого диапазона
+  if (distance < minDistance || distance > maxDistance) {
+    stopMotor();
+    allLEDsOff();
+    Serial.println("ERROR: Invalid distance");
+    delay(100);
+    return;
+  }
 
   Serial.print("Distance: ");
   Serial.print(distance);
@@ -86,7 +118,7 @@ void loop() {
     digitalWrite(redLED, HIGH);
   }
 
-  // От 20 до 50 см включительно
+  // От 20 до 50 см
   else if (distance <= 50) {
     digitalWrite(yellowLED, HIGH);
 
